@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Calendario Dinamico - File Unico</title>
+    <title>Calendario Dinamico - File Unico con Login</title>
     
     <style>
         body {
@@ -22,6 +22,51 @@
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
             padding: 20px;
             width: 350px;
+        }
+
+        /* Nuovo stile per il modulo di login */
+        .login-container {
+            background-color: #fff;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+            width: 300px;
+            text-align: center;
+        }
+
+        .login-container h2 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .login-container input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-sizing: border-box; /* Assicura che il padding non aumenti la larghezza totale */
+        }
+
+        .login-container button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background-color 0.3s;
+        }
+
+        .login-container button:hover {
+            background-color: #0056b3;
+        }
+        
+        .error-message {
+            color: red;
+            margin-top: 10px;
+            height: 20px;
         }
 
         /* Intestazione e pulsanti di navigazione */
@@ -92,11 +137,52 @@
         .other-month-day {
             color: #ccc;
         }
+        
+        /* Stile per mostrare l'utente loggato e il logout */
+        #user-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            font-size: 0.9em;
+            color: #555;
+        }
+        
+        #logout-btn {
+            background: none;
+            border: 1px solid #dc3545;
+            color: #dc3545;
+            padding: 5px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s, color 0.3s;
+        }
+        
+        #logout-btn:hover {
+            background-color: #dc3545;
+            color: white;
+        }
     </style>
 </head>
 <body>
 
-    <div class="calendar-container">
+    <div class="login-container" id="login-screen">
+        <h2>Accesso al Calendario 🗓️</h2>
+        <p>Inserisci il tuo nome:</p>
+        <input type="text" id="username-input" placeholder="Esempio: Marco" required>
+        <button id="login-btn">Accedi</button>
+        <div class="error-message" id="error-msg"></div>
+        <p style="margin-top: 15px; font-size: 0.85em; color: #777;">
+            Utenti validi: Dalila, Marco, Paolo, Gabriele, Federica, Luca, Master
+        </p>
+    </div>
+
+    <div class="calendar-container" id="calendar-screen" style="display:none;">
+        <div id="user-info">
+            <span>Accesso come: **<span id="logged-in-user"></span>**</span>
+            <button id="logout-btn">Logout</button>
+        </div>
+        
         <div class="calendar-header">
             <button id="prev-btn" class="nav-btn">←</button>
             <h2 id="current-month-year"></h2>
@@ -114,7 +200,7 @@
         </div>
 
         <div class="calendar-dates" id="calendar-dates">
-            </div>
+        </div>
     </div>
 
     <script>
@@ -122,8 +208,22 @@
         let currentDate = new Date();
         let currentYear = currentDate.getFullYear();
         let currentMonth = currentDate.getMonth(); // 0-11
+        let loggedInUser = null; // Stato dell'utente loggato
+
+        // Array degli utenti validi (in minuscolo per una verifica case-insensitive)
+        const VALID_USERS = [
+            "dalila", "marco", "paolo", "gabriele", "federica", "luca", "master"
+        ];
 
         // Riferimenti agli elementi HTML
+        const loginScreen = document.getElementById('login-screen');
+        const calendarScreen = document.getElementById('calendar-screen');
+        const usernameInput = document.getElementById('username-input');
+        const loginBtn = document.getElementById('login-btn');
+        const logoutBtn = document.getElementById('logout-btn');
+        const errorMsg = document.getElementById('error-msg');
+        const loggedInUserSpan = document.getElementById('logged-in-user');
+        
         const monthYearDisplay = document.getElementById('current-month-year');
         const datesContainer = document.getElementById('calendar-dates');
         const prevBtn = document.getElementById('prev-btn');
@@ -136,14 +236,67 @@
         ];
 
         /**
+         * Funzione per mostrare il calendario e nascondere il login (o viceversa).
+         */
+        function updateUI() {
+            if (loggedInUser) {
+                // Utente loggato: mostra il calendario
+                loginScreen.style.display = 'none';
+                calendarScreen.style.display = 'block';
+                loggedInUserSpan.textContent = loggedInUser;
+                renderCalendar();
+            } else {
+                // Utente disconnesso: mostra il login
+                loginScreen.style.display = 'block';
+                calendarScreen.style.display = 'none';
+                usernameInput.value = ''; // Pulisci il campo input
+                errorMsg.textContent = ''; // Pulisci l'errore
+            }
+        }
+        
+        /**
+         * Gestisce il tentativo di login.
+         */
+        function handleLogin() {
+            const username = usernameInput.value.trim();
+            
+            if (username === "") {
+                errorMsg.textContent = "Per favore, inserisci il tuo nome.";
+                return;
+            }
+
+            // Normalizza il nome inserito per il confronto (es. "marco" vs "Marco")
+            const normalizedUsername = username.toLowerCase();
+
+            if (VALID_USERS.includes(normalizedUsername)) {
+                // Login riuscito
+                // Capitalizza la prima lettera per visualizzarla bene (es. "marco" -> "Marco")
+                loggedInUser = username.charAt(0).toUpperCase() + username.slice(1).toLowerCase();
+                updateUI();
+            } else {
+                // Login fallito
+                errorMsg.textContent = "Nome utente non riconosciuto. Riprova.";
+            }
+        }
+
+        /**
+         * Gestisce il logout.
+         */
+        function handleLogout() {
+            loggedInUser = null;
+            updateUI();
+        }
+
+        /**
          * Funzione principale per disegnare il calendario
          */
         function renderCalendar() {
+            // ... (logica del calendario esistente) ...
+            
             // 1. Aggiorna l'intestazione
             monthYearDisplay.textContent = `${monthNames[currentMonth]} ${currentYear}`;
 
             // 2. Calcola i parametri del mese
-            // Data per il primo giorno del mese visualizzato
             const firstDayOfMonth = new Date(currentYear, currentMonth, 1);
             // Giorno della settimana (0=Dom, 6=Sab) del primo giorno del mese
             const firstDayIndex = firstDayOfMonth.getDay(); 
@@ -185,32 +338,45 @@
          * Gestisce la navigazione al mese precedente
          */
         prevBtn.addEventListener('click', () => {
-            // Se è Gennaio (0), vai a Dicembre (11) dell'anno precedente
-            if (currentMonth === 0) {
-                currentMonth = 11;
-                currentYear--;
-            } else {
-                currentMonth--;
+            if (loggedInUser) {
+                if (currentMonth === 0) {
+                    currentMonth = 11;
+                    currentYear--;
+                } else {
+                    currentMonth--;
+                }
+                renderCalendar();
             }
-            renderCalendar();
         });
 
         /**
          * Gestisce la navigazione al mese successivo
          */
         nextBtn.addEventListener('click', () => {
-            // Se è Dicembre (11), vai a Gennaio (0) dell'anno successivo
-            if (currentMonth === 11) {
-                currentMonth = 0;
-                currentYear++;
-            } else {
-                currentMonth++;
+            if (loggedInUser) {
+                if (currentMonth === 11) {
+                    currentMonth = 0;
+                    currentYear++;
+                } else {
+                    currentMonth++;
+                }
+                renderCalendar();
             }
-            renderCalendar();
+        });
+        
+        // Listener per i pulsanti di Login/Logout
+        loginBtn.addEventListener('click', handleLogin);
+        logoutBtn.addEventListener('click', handleLogout);
+        
+        // Permetti l'accesso premendo "Invio" nel campo di testo
+        usernameInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                handleLogin();
+            }
         });
 
-        // Avvia il calendario al caricamento della pagina
-        document.addEventListener('DOMContentLoaded', renderCalendar);
+        // Avvia l'interfaccia utente al caricamento della pagina
+        document.addEventListener('DOMContentLoaded', updateUI);
     </script>
 </body>
 </html>
