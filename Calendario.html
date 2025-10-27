@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Calendario Dinamico - File Unico con Login</title>
+    <title>Calendario Dinamico - File Unico con Presenza</title>
     
     <style>
         body {
@@ -22,6 +22,7 @@
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
             padding: 20px;
             width: 350px;
+            position: relative; /* Necessario per posizionare il popup */
         }
 
         /* Nuovo stile per il modulo di login */
@@ -45,7 +46,7 @@
             margin-bottom: 15px;
             border: 1px solid #ccc;
             border-radius: 5px;
-            box-sizing: border-box; /* Assicura che il padding non aumenti la larghezza totale */
+            box-sizing: border-box;
         }
 
         .login-container button {
@@ -99,7 +100,7 @@
         /* Griglia dei giorni della settimana e delle date */
         .calendar-weekdays, .calendar-dates {
             display: grid;
-            grid-template-columns: repeat(7, 1fr); /* 7 colonne per i 7 giorni */
+            grid-template-columns: repeat(7, 1fr);
             text-align: center;
         }
 
@@ -109,10 +110,13 @@
             padding-bottom: 10px;
         }
 
+        /* Stile base per le celle del giorno */
         .calendar-dates > div {
             padding: 10px 5px;
             border-radius: 5px;
-            cursor: default;
+            cursor: pointer; /* Ora i giorni sono cliccabili */
+            position: relative;
+            user-select: none;
         }
 
         /* Stile per i giorni del mese corrente */
@@ -121,14 +125,14 @@
             transition: background-color 0.2s;
         }
 
-        .current-month-day:hover:not(.today) {
+        .current-month-day:hover:not(.today):not(.present):not(.absent) {
             background-color: #eee;
         }
 
         /* Stile per il giorno odierno: EVIDENZIATO */
         .today {
-            background-color: **#007bff**;
-            color: **white**;
+            background-color: #007bff;
+            color: white;
             font-weight: bold;
             box-shadow: 0 2px 5px rgba(0, 123, 255, 0.5);
         }
@@ -136,9 +140,10 @@
         /* Stile per i giorni non appartenenti al mese visualizzato */
         .other-month-day {
             color: #ccc;
+            cursor: default !important;
         }
         
-        /* Stile per mostrare l'utente loggato e il logout */
+        /* Stile per l'utente loggato e il logout */
         #user-info {
             display: flex;
             justify-content: space-between;
@@ -162,6 +167,76 @@
             background-color: #dc3545;
             color: white;
         }
+
+        /* NUOVI STILI per lo stato Presente/Assente */
+        .status-indicator {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            font-size: 0.7em;
+            padding: 1px 3px;
+            border-radius: 3px;
+            font-weight: bold;
+            line-height: 1;
+        }
+
+        .present {
+            border: 2px solid #28a745; /* Bordo verde */
+        }
+        
+        .present .status-indicator {
+            background-color: #28a745;
+            color: white;
+        }
+
+        .absent {
+            border: 2px solid #ffc107; /* Bordo giallo */
+        }
+
+        .absent .status-indicator {
+            background-color: #ffc107;
+            color: #333;
+        }
+
+        /* NUOVO STILE per il popup di selezione */
+        #status-selector {
+            position: absolute;
+            background-color: #f9f9f9;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+            z-index: 100;
+            padding: 5px;
+            display: none; /* Inizialmente nascosto */
+            min-width: 120px;
+            text-align: left;
+        }
+
+        #status-selector button {
+            display: block;
+            width: 100%;
+            padding: 8px;
+            margin: 3px 0;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            text-align: center;
+            transition: background-color 0.2s;
+        }
+
+        #status-selector button:hover {
+            opacity: 0.8;
+        }
+
+        #present-btn {
+            background-color: #28a745; /* Verde */
+            color: white;
+        }
+
+        #absent-btn {
+            background-color: #ffc107; /* Giallo */
+            color: #333;
+        }
     </style>
 </head>
 <body>
@@ -178,6 +253,12 @@
     </div>
 
     <div class="calendar-container" id="calendar-screen" style="display:none;">
+        
+        <div id="status-selector" style="display: none;">
+            <button id="present-btn" data-status="presente">Ci sono</button>
+            <button id="absent-btn" data-status="assente">Manco</button>
+        </div>
+
         <div id="user-info">
             <span>Accesso come: **<span id="logged-in-user"></span>**</span>
             <button id="logout-btn">Logout</button>
@@ -204,11 +285,15 @@
     </div>
 
     <script>
-        // Variabili globali per tenere traccia della data visualizzata
+        // Variabili globali
         let currentDate = new Date();
         let currentYear = currentDate.getFullYear();
-        let currentMonth = currentDate.getMonth(); // 0-11
-        let loggedInUser = null; // Stato dell'utente loggato
+        let currentMonth = currentDate.getMonth();
+        let loggedInUser = null;
+        let selectedDate = null; // Memorizza la data cliccata (per il selettore)
+        
+        // Struttura dati per memorizzare gli stati: { "NomeUtente": { "AAAA-MM-GG": "presente" | "assente" } }
+        let userStatusData = {}; 
 
         // Array degli utenti validi (in minuscolo per una verifica case-insensitive)
         const VALID_USERS = [
@@ -228,35 +313,58 @@
         const datesContainer = document.getElementById('calendar-dates');
         const prevBtn = document.getElementById('prev-btn');
         const nextBtn = document.getElementById('next-btn');
+        
+        // Nuovi riferimenti per il selettore
+        const statusSelector = document.getElementById('status-selector');
+        const presentBtn = document.getElementById('present-btn');
+        const absentBtn = document.getElementById('absent-btn');
 
         // Array con i nomi dei mesi in italiano
         const monthNames = [
             "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
             "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"
         ];
+        
+        // --- Funzioni di Utility ---
 
         /**
-         * Funzione per mostrare il calendario e nascondere il login (o viceversa).
+         * Formatta una data nel formato YYYY-MM-GG per usarla come chiave nell'oggetto stato.
+         * @param {number} year 
+         * @param {number} month 0-11
+         * @param {number} day 1-31
          */
+        function formatDate(year, month, day) {
+            // Aggiunge zero iniziale se necessario (il mese è 0-based, quindi +1)
+            const m = String(month + 1).padStart(2, '0');
+            const d = String(day).padStart(2, '0');
+            return `${year}-${m}-${d}`;
+        }
+
+
+        // --- Funzioni di Interfaccia Utente (Login/Logout) ---
+
         function updateUI() {
             if (loggedInUser) {
                 // Utente loggato: mostra il calendario
                 loginScreen.style.display = 'none';
                 calendarScreen.style.display = 'block';
                 loggedInUserSpan.textContent = loggedInUser;
+                // Inizializza la struttura dati per l'utente se non esiste
+                if (!userStatusData[loggedInUser]) {
+                    userStatusData[loggedInUser] = {};
+                }
                 renderCalendar();
             } else {
                 // Utente disconnesso: mostra il login
                 loginScreen.style.display = 'block';
                 calendarScreen.style.display = 'none';
-                usernameInput.value = ''; // Pulisci il campo input
-                errorMsg.textContent = ''; // Pulisci l'errore
+                usernameInput.value = '';
+                errorMsg.textContent = '';
+                // Nascondi il selettore se per caso era aperto
+                statusSelector.style.display = 'none'; 
             }
         }
         
-        /**
-         * Gestisce il tentativo di login.
-         */
         function handleLogin() {
             const username = usernameInput.value.trim();
             
@@ -265,78 +373,137 @@
                 return;
             }
 
-            // Normalizza il nome inserito per il confronto (es. "marco" vs "Marco")
             const normalizedUsername = username.toLowerCase();
 
             if (VALID_USERS.includes(normalizedUsername)) {
-                // Login riuscito
-                // Capitalizza la prima lettera per visualizzarla bene (es. "marco" -> "Marco")
+                // Capitalizza la prima lettera per visualizzarla bene
                 loggedInUser = username.charAt(0).toUpperCase() + username.slice(1).toLowerCase();
                 updateUI();
             } else {
-                // Login fallito
                 errorMsg.textContent = "Nome utente non riconosciuto. Riprova.";
             }
         }
 
-        /**
-         * Gestisce il logout.
-         */
         function handleLogout() {
             loggedInUser = null;
             updateUI();
         }
 
+
+        // --- Logica del Calendario e della Selezione Stato ---
+        
+        /**
+         * Mostra il selettore di stato vicino al giorno cliccato.
+         * @param {HTMLElement} dayDiv L'elemento div del giorno cliccato.
+         * @param {string} dateKey La chiave della data (AAAA-MM-GG).
+         */
+        function showStatusSelector(dayDiv, dateKey) {
+            // Nascondi il selettore precedente
+            statusSelector.style.display = 'none'; 
+            
+            selectedDate = dateKey;
+
+            // Posiziona il selettore vicino al div cliccato
+            const rect = dayDiv.getBoundingClientRect();
+            const containerRect = calendarScreen.getBoundingClientRect();
+
+            // Calcola la posizione relativa al container del calendario
+            statusSelector.style.left = `${rect.left - containerRect.left + rect.width / 2 - statusSelector.offsetWidth / 2}px`;
+            statusSelector.style.top = `${rect.top - containerRect.top + rect.height}px`;
+
+            statusSelector.style.display = 'block';
+        }
+        
+        /**
+         * Salva lo stato e aggiorna il calendario.
+         * @param {string} status "presente" o "assente".
+         */
+        function saveStatus(status) {
+            if (!selectedDate || !loggedInUser) return;
+
+            // Aggiorna lo stato per l'utente loggato
+            userStatusData[loggedInUser][selectedDate] = status;
+            
+            // Ricarica il calendario per riflettere la modifica
+            renderCalendar();
+            
+            // Nascondi il selettore
+            statusSelector.style.display = 'none';
+        }
+        
         /**
          * Funzione principale per disegnare il calendario
          */
         function renderCalendar() {
-            // ... (logica del calendario esistente) ...
-            
-            // 1. Aggiorna l'intestazione
             monthYearDisplay.textContent = `${monthNames[currentMonth]} ${currentYear}`;
 
-            // 2. Calcola i parametri del mese
             const firstDayOfMonth = new Date(currentYear, currentMonth, 1);
-            // Giorno della settimana (0=Dom, 6=Sab) del primo giorno del mese
             const firstDayIndex = firstDayOfMonth.getDay(); 
-            // Ultimo giorno del mese visualizzato (passando 0 al giorno successivo)
             const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
             const daysInMonth = lastDayOfMonth.getDate();
 
-            // Rimuovi le date precedenti
             datesContainer.innerHTML = '';
 
-            // Data odierna per l'evidenziazione
             const today = new Date();
             const isCurrentMonth = today.getFullYear() === currentYear && today.getMonth() === currentMonth;
             const todayDate = today.getDate();
 
-            // 3. Aggiungi i giorni di "riempimento" (del mese precedente)
+            // Riferimento allo stato dell'utente corrente (se loggato)
+            const currentUserStatus = loggedInUser ? userStatusData[loggedInUser] : {};
+
+            // 1. Aggiungi i giorni di "riempimento" (del mese precedente)
             for (let i = 0; i < firstDayIndex; i++) {
                 const emptyDiv = document.createElement('div');
                 emptyDiv.classList.add('other-month-day');
                 datesContainer.appendChild(emptyDiv);
             }
 
-            // 4. Aggiungi i giorni del mese corrente
+            // 2. Aggiungi i giorni del mese corrente
             for (let day = 1; day <= daysInMonth; day++) {
                 const dayDiv = document.createElement('div');
                 dayDiv.textContent = day;
                 dayDiv.classList.add('current-month-day');
-
-                // Controlla se è il giorno odierno e lo evidenzia
+                
+                // Crea la chiave della data per lo storage
+                const dateKey = formatDate(currentYear, currentMonth, day);
+                
+                // Evidenzia il giorno odierno
                 if (isCurrentMonth && day === todayDate) {
                     dayDiv.classList.add('today');
                 }
+                
+                // Applica lo stato salvato (solo se loggato)
+                const status = currentUserStatus[dateKey];
+                if (status) {
+                    if (status === 'presente') {
+                        dayDiv.classList.add('present');
+                        const indicator = document.createElement('span');
+                        indicator.classList.add('status-indicator');
+                        indicator.textContent = '✔️'; // Simbolo di presenza
+                        dayDiv.appendChild(indicator);
+                    } else if (status === 'assente') {
+                        dayDiv.classList.add('absent');
+                        const indicator = document.createElement('span');
+                        indicator.classList.add('status-indicator');
+                        indicator.textContent = '❌'; // Simbolo di assenza
+                        dayDiv.appendChild(indicator);
+                    }
+                }
+                
+                // Aggiungi il listener per l'apertura del selettore
+                dayDiv.addEventListener('click', () => {
+                    if (loggedInUser) {
+                        showStatusSelector(dayDiv, dateKey);
+                    }
+                });
 
                 datesContainer.appendChild(dayDiv);
             }
         }
+        
+        // --- Event Listeners Globali ---
 
-        /**
-         * Gestisce la navigazione al mese precedente
-         */
+        // Gestione della navigazione (solo se loggato)
         prevBtn.addEventListener('click', () => {
             if (loggedInUser) {
                 if (currentMonth === 0) {
@@ -346,12 +513,10 @@
                     currentMonth--;
                 }
                 renderCalendar();
+                statusSelector.style.display = 'none'; // Chiudi il selettore alla navigazione
             }
         });
 
-        /**
-         * Gestisce la navigazione al mese successivo
-         */
         nextBtn.addEventListener('click', () => {
             if (loggedInUser) {
                 if (currentMonth === 11) {
@@ -361,17 +526,32 @@
                     currentMonth++;
                 }
                 renderCalendar();
+                statusSelector.style.display = 'none'; // Chiudi il selettore alla navigazione
             }
         });
         
         // Listener per i pulsanti di Login/Logout
         loginBtn.addEventListener('click', handleLogin);
         logoutBtn.addEventListener('click', handleLogout);
-        
-        // Permetti l'accesso premendo "Invio" nel campo di testo
         usernameInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 handleLogin();
+            }
+        });
+        
+        // Listener per i pulsanti del selettore
+        presentBtn.addEventListener('click', () => saveStatus('presente'));
+        absentBtn.addEventListener('click', () => saveStatus('assente'));
+        
+        // Chiudi il selettore cliccando fuori
+        document.addEventListener('click', (e) => {
+            // Se il click NON è sul selettore e NON è un giorno del calendario
+            if (loggedInUser && 
+                statusSelector.style.display === 'block' && 
+                !statusSelector.contains(e.target) && 
+                !datesContainer.contains(e.target)) {
+                
+                statusSelector.style.display = 'none';
             }
         });
 
