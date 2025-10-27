@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calendario Dinamico - File Unico</title>
+    
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #f4f4f9;
+        }
+
+        .calendar-container {
+            background-color: #fff;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            width: 350px;
+        }
+
+        /* Intestazione e pulsanti di navigazione */
+        .calendar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        #current-month-year {
+            font-size: 1.5em;
+            color: #333;
+        }
+
+        .nav-btn {
+            background: none;
+            border: none;
+            font-size: 1.5em;
+            cursor: pointer;
+            color: #007bff;
+            padding: 5px 10px;
+            transition: color 0.3s;
+        }
+
+        .nav-btn:hover {
+            color: #0056b3;
+        }
+
+        /* Griglia dei giorni della settimana e delle date */
+        .calendar-weekdays, .calendar-dates {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr); /* 7 colonne per i 7 giorni */
+            text-align: center;
+        }
+
+        .calendar-weekdays > div {
+            font-weight: bold;
+            color: #555;
+            padding-bottom: 10px;
+        }
+
+        .calendar-dates > div {
+            padding: 10px 5px;
+            border-radius: 5px;
+            cursor: default;
+        }
+
+        /* Stile per i giorni del mese corrente */
+        .current-month-day {
+            color: #333;
+            transition: background-color 0.2s;
+        }
+
+        .current-month-day:hover:not(.today) {
+            background-color: #eee;
+        }
+
+        /* Stile per il giorno odierno: EVIDENZIATO */
+        .today {
+            background-color: **#007bff**;
+            color: **white**;
+            font-weight: bold;
+            box-shadow: 0 2px 5px rgba(0, 123, 255, 0.5);
+        }
+
+        /* Stile per i giorni non appartenenti al mese visualizzato */
+        .other-month-day {
+            color: #ccc;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="calendar-container">
+        <div class="calendar-header">
+            <button id="prev-btn" class="nav-btn">←</button>
+            <h2 id="current-month-year"></h2>
+            <button id="next-btn" class="nav-btn">→</button>
+        </div>
+
+        <div class="calendar-weekdays">
+            <div>Dom</div>
+            <div>Lun</div>
+            <div>Mar</div>
+            <div>Mer</div>
+            <div>Gio</div>
+            <div>Ven</div>
+            <div>Sab</div>
+        </div>
+
+        <div class="calendar-dates" id="calendar-dates">
+            </div>
+    </div>
+
+    <script>
+        // Variabili globali per tenere traccia della data visualizzata
+        let currentDate = new Date();
+        let currentYear = currentDate.getFullYear();
+        let currentMonth = currentDate.getMonth(); // 0-11
+
+        // Riferimenti agli elementi HTML
+        const monthYearDisplay = document.getElementById('current-month-year');
+        const datesContainer = document.getElementById('calendar-dates');
+        const prevBtn = document.getElementById('prev-btn');
+        const nextBtn = document.getElementById('next-btn');
+
+        // Array con i nomi dei mesi in italiano
+        const monthNames = [
+            "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
+            "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"
+        ];
+
+        /**
+         * Funzione principale per disegnare il calendario
+         */
+        function renderCalendar() {
+            // 1. Aggiorna l'intestazione
+            monthYearDisplay.textContent = `${monthNames[currentMonth]} ${currentYear}`;
+
+            // 2. Calcola i parametri del mese
+            // Data per il primo giorno del mese visualizzato
+            const firstDayOfMonth = new Date(currentYear, currentMonth, 1);
+            // Giorno della settimana (0=Dom, 6=Sab) del primo giorno del mese
+            const firstDayIndex = firstDayOfMonth.getDay(); 
+            // Ultimo giorno del mese visualizzato (passando 0 al giorno successivo)
+            const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
+            const daysInMonth = lastDayOfMonth.getDate();
+
+            // Rimuovi le date precedenti
+            datesContainer.innerHTML = '';
+
+            // Data odierna per l'evidenziazione
+            const today = new Date();
+            const isCurrentMonth = today.getFullYear() === currentYear && today.getMonth() === currentMonth;
+            const todayDate = today.getDate();
+
+            // 3. Aggiungi i giorni di "riempimento" (del mese precedente)
+            for (let i = 0; i < firstDayIndex; i++) {
+                const emptyDiv = document.createElement('div');
+                emptyDiv.classList.add('other-month-day');
+                datesContainer.appendChild(emptyDiv);
+            }
+
+            // 4. Aggiungi i giorni del mese corrente
+            for (let day = 1; day <= daysInMonth; day++) {
+                const dayDiv = document.createElement('div');
+                dayDiv.textContent = day;
+                dayDiv.classList.add('current-month-day');
+
+                // Controlla se è il giorno odierno e lo evidenzia
+                if (isCurrentMonth && day === todayDate) {
+                    dayDiv.classList.add('today');
+                }
+
+                datesContainer.appendChild(dayDiv);
+            }
+        }
+
+        /**
+         * Gestisce la navigazione al mese precedente
+         */
+        prevBtn.addEventListener('click', () => {
+            // Se è Gennaio (0), vai a Dicembre (11) dell'anno precedente
+            if (currentMonth === 0) {
+                currentMonth = 11;
+                currentYear--;
+            } else {
+                currentMonth--;
+            }
+            renderCalendar();
+        });
+
+        /**
+         * Gestisce la navigazione al mese successivo
+         */
+        nextBtn.addEventListener('click', () => {
+            // Se è Dicembre (11), vai a Gennaio (0) dell'anno successivo
+            if (currentMonth === 11) {
+                currentMonth = 0;
+                currentYear++;
+            } else {
+                currentMonth++;
+            }
+            renderCalendar();
+        });
+
+        // Avvia il calendario al caricamento della pagina
+        document.addEventListener('DOMContentLoaded', renderCalendar);
+    </script>
+</body>
+</html>
